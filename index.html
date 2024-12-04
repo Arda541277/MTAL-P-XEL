@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel World</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #ffffff;
+        }
+
+        #canvas {
+            display: block;
+            margin: 0 auto;
+            cursor: crosshair;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            background-color: #34495e;
+            padding: 10px;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 10;
+        }
+
+        .color-block {
+            width: 30px;
+            height: 30px;
+            margin: 2px;
+            cursor: pointer;
+            border: 1px solid #ffffff;
+        }
+
+        .color-block:hover {
+            border: 2px solid #000000;
+        }
+
+        .block-counter {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 16px;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+            z-index: 20;
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar" id="color-palette">
+        <!-- Renk paleti burada oluşturulacak -->
+    </div>
+    <canvas id="canvas"></canvas>
+    <div id="block-counter" class="block-counter">Blocks Left: 10</div>
+    <div id="toast" class="toast">No blocks left! Please wait...</div>
+
+    <script>
+        // Canvas Setup
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const toast = document.getElementById('toast');
+        const blockCounter = document.getElementById('block-counter');
+        let drawing = false;
+        let selectedColor = "#000000"; // Default color is black
+        let blocksLeft = 10; // Max 10 blocks initially
+        let blockRefillTimer; // Timer for block refill
+        const refillTime = 7000; // 7 seconds in milliseconds
+        const maxBlocks = 10;
+        let lastPaintTime = 0; // Son boyama zamanı
+        let canDraw = true; // Yeni blok ekleyip eklenemeyeceğini kontrol eder
+        const gridState = {}; // Ağıdaki her hücrenin rengini saklamak için bir obje
+        let toastTimer; // Geri sayım için zamanlayıcı
+
+        // Set canvas to full screen
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            drawGrid(); // Çizgi ağı ekle
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Event Listeners
+        canvas.addEventListener('mousedown', () => (drawing = true));
+        canvas.addEventListener('mouseup', () => (drawing = false));
+        canvas.addEventListener('mousemove', (event) => {
+            if (drawing && canDraw) {
+                const now = Date.now();
+                if (now - lastPaintTime > 200) { // 200ms gecikme
+                    draw(event);
+                    lastPaintTime = now;
+                }
+            }
+        });
+
+        // Draw Function
+        function draw(event) {
+            if (blocksLeft <= 0) {
+                showToast(); // Toast mesajını göster
+                return;
+            }
+
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor((event.clientX - rect.left) / 10) * 10;
+            const y = Math.floor((event.clientY - rect.top) / 10) * 10;
+
+            // Kontrol: Aynı alanda mevcut renk yoksa boyama yapılır
+            if (gridState[`${x},${y}`] === selectedColor) {
+                return; // Aynı renk seçili olan alana blok koyulmaz
+            }
+
+            // Fill rectangle
+            ctx.fillStyle = selectedColor;
+            ctx.fillRect(x, y, 10, 10);
+
+            // Draw border around pixel
+            ctx.strokeStyle = "#dcdcdc"; // Açık gri renk
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, y, 10, 10);
+
+            gridState[`${x},${y}`] = selectedColor; // Bu koordinat için rengini kaydet
+
+            blocksLeft--; // Decrease block count
+            updateBlockCounter();
+            checkBlockRefill(); // Check if refill is needed
+            
+            // Block cooldown
+            canDraw = false;
+            setTimeout(() => {
+                canDraw = true; // After 0.5 second, allow drawing again
+            }, 500); // 500ms bekle
+        }
+
+        // Draw Grid Function
+        function drawGrid() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = "#dcdcdc"; // Açık gri renk
+            ctx.lineWidth = 1;
+
+            // Çizgi ağı oluştur
+            for (let x = 0; x < canvas.width; x += 10) {
+                for (let y = 0; y < canvas.height; y += 10) {
+                    ctx.strokeRect(x, y, 10, 10);
+                }
+            }
+        }
+
+        // Block Counter Update
+        function updateBlockCounter() {
+            blockCounter.textContent = `Blocks Left: ${blocksLeft}`;
+        }
+
+        // Show Toast Message with countdown
+        function showToast() {
+            let countdown = 7; // Başlangıç sayacı
+            toast.classList.add("show");
+            toast.textContent = `No blocks left! Please wait... ${countdown}s`; // Başlangıç mesajı
+
+            toastTimer = setInterval(() => {
+                countdown--; // Sayacı bir azalt
+                toast.textContent = `No blocks left! Please wait... ${countdown}s`;
+                if (countdown <= 0) {
+                    clearInterval(toastTimer); // Sayac sıfırlandığında zamanlayıcıyı temizle
+                    toast.classList.remove("show"); // Mesajı gizle
+                }
+            }, 1000); // Her saniye bir kez çalıştır
+        }
+
+        // Check Block Refill
+        function checkBlockRefill() {
+            if (blocksLeft === 0 && !blockRefillTimer) {
+                blockRefillTimer = setInterval(() => {
+                    if (blocksLeft < maxBlocks) {
+                        blocksLeft++;
+                        updateBlockCounter();
+
+                        // Stop the timer if max blocks are reached
+                        if (blocksLeft === maxBlocks) {
+                            clearInterval(blockRefillTimer);
+                            blockRefillTimer = null;
+                        }
+                    }
+                }, refillTime);
+            }
+        }
+
+        // Initialize Color Palette
+        const colors = [
+            "#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF",
+            "#000000", "#FFFFFF", "#808080", "#800000", "#808000", "#008000",
+            "#800080", "#008080", "#000080", "#FFA500", "#A52A2A", "#DC143C"
+        ];
+
+        const colorPalette = document.getElementById("color-palette");
+        colors.forEach((color) => {
+            const colorBlock = document.createElement("div");
+            colorBlock.className = "color-block";
+            colorBlock.style.backgroundColor = color;
+            colorBlock.addEventListener("click", () => {
+                selectedColor = color;
+            });
+            colorPalette.appendChild(colorBlock);
+        });
+
+        drawGrid();
+    </script>
+</body>
+</html>
